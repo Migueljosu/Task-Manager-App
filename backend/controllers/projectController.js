@@ -1,4 +1,6 @@
+const { validationResult } = require("express-validator");
 const Project = require("../models/Project");
+const { io } = require("../controllers/realtimeController"); // Importando a instância do Socket.IO
 
 // Listar todos os projetos
 const getProjects = async (req, res) => {
@@ -12,10 +14,20 @@ const getProjects = async (req, res) => {
 
 // Criar novo projeto
 const createProject = async (req, res) => {
+  // Verificar erros de validação
+  const errors = validationResult(req);
+  if (!errors.isEmpty()) {
+    return res.status(400).json({ errors: errors.array() });
+  }
+
   const { name, description, ownerId } = req.body;
   try {
     const newProject = new Project({ name, description, ownerId });
     await newProject.save();
+
+    // Emitir o evento 'project-created' para todos os clientes conectados
+    io.emit("project-created", newProject);
+
     res.status(201).json(newProject);
   } catch (error) {
     res.status(500).json({ error: "Erro ao criar projeto" });
@@ -39,6 +51,12 @@ const getProject = async (req, res) => {
 
 // Atualizar projeto
 const updateProject = async (req, res) => {
+  // Verificar erros de validação
+  const errors = validationResult(req);
+  if (!errors.isEmpty()) {
+    return res.status(400).json({ errors: errors.array() });
+  }
+
   try {
     const updatedProject = await Project.findByIdAndUpdate(
       req.params.id,
@@ -48,6 +66,10 @@ const updateProject = async (req, res) => {
     if (!updatedProject) {
       return res.status(404).json({ error: "Projeto não encontrado" });
     }
+
+    // Emitir o evento 'project-updated' para todos os clientes conectados
+    io.emit("project-updated", updatedProject);
+
     res.status(200).json(updatedProject);
   } catch (error) {
     res.status(500).json({ error: "Erro ao atualizar projeto" });
@@ -61,6 +83,10 @@ const deleteProject = async (req, res) => {
     if (!deletedProject) {
       return res.status(404).json({ error: "Projeto não encontrado" });
     }
+
+    // Emitir o evento 'project-deleted' para todos os clientes conectados
+    io.emit("project-deleted", deletedProject);
+
     res.status(200).json({ message: "Projeto excluído com sucesso" });
   } catch (error) {
     res.status(500).json({ error: "Erro ao excluir projeto" });
@@ -82,6 +108,12 @@ const getMembers = async (req, res) => {
 
 // Convidar membro para o projeto
 const inviteMember = async (req, res) => {
+  // Verificar erros de validação
+  const errors = validationResult(req);
+  if (!errors.isEmpty()) {
+    return res.status(400).json({ errors: errors.array() });
+  }
+
   const { userId, role } = req.body;
   try {
     const project = await Project.findById(req.params.id);
@@ -91,6 +123,10 @@ const inviteMember = async (req, res) => {
 
     project.members.push({ userId, role });
     await project.save();
+
+    // Emitir o evento 'member-invited' para todos os clientes conectados
+    io.emit("member-invited", { projectId: project._id, userId, role });
+
     res.status(200).json({ message: "Membro convidado com sucesso" });
   } catch (error) {
     res.status(500).json({ error: "Erro ao convidar membro" });
